@@ -97,6 +97,7 @@ x[-3] # Grab everything except the 3rd entry
 
 # Indices can be used to replace specific values
 z[5] <- 1000 # Change entry 5 to 1000
+z
 
 # Continuous vectors can also be constructed using colon (:) as a shortcut
 y <- 6:10
