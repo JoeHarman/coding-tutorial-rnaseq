@@ -1,0 +1,19 @@
+---
+title: "Basic analysis and visualisation"
+---
+
+## Aims
+
+```{r}
+
+print("hello world")
+
+```
+
+Load required packages:
+
+```{r}
+
+print("hello world")
+
+```

@@ -6,6 +6,7 @@
 
 
 ## Required packages can be installed with the following commands:
+install.packages("rmarkdown")
 install.packages("tidyverse")
 install.packages("patchwork")
 install.packages("BiocManager")
