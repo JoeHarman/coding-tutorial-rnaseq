@@ -2,18 +2,311 @@
 title: "Basic analysis and visualisation"
 ---
 
-## Aims
+## What is an R-markdown file?
+
+This an an R-markdown document. This allows us to effectively write comments in proper prose, have code output in-line, and allows linking to results and plots. It effectively functions as a coding lab book.
+We are also able to render a HTML or PDF report once the analysis is complete.
+
+An alternative to R-markdown is Quarto, which is a more feature-rich alternative. For real analyses that will be reported, quarto installation by IT will be required.
+
+## Load libraries
+
+Hopefully the R libraries in `00_install_me.R` were installed fine! Here we need to load them.
+The code to load the libraries is already pre-written in the "code chunk" below. You can run the commands as before (ctrl+enter), or with these code-chunks you can click the "run" command.
 
 ```{r}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+```
 
-print("hello world")
+## Base R vs tidyverse
+
+In the `01_basic_R_commands.R` script, we were primarily using base R. While R is flexible and powerful, it can become very difficult to read with complex code.
+
+`tidyverse` is a library that attempts to solve this complexity, by improving the legibility of the code. One of it's main features is the `%>%` pipe operator. This takes the result of once function, and inputs it into the next function, in a daisy-chain.
+
+The code chunk below is a series of functions performed on a data frame in base R:
+```{r}
+df_example <- data.frame(
+    Name = c("Jerry", "Emily", "Steven", "Jane"),
+    Scores = c(25, 50, 75, 100),
+    location = c("Oxford", "London", "Cambridge", "Oxford")
+)
+
+# Following code filters data for oxford location, selects the scores column, then calculates an average
+# The logic is "inside-out". The first steps occur in the middle, the last steps occur on the outside.
+mean(df_example[df_example$location == "Oxford", "Scores"])
 
 ```
 
-Load required packages:
+The following code chunk is the same calculations but performed using a tidyverse style, with helper functions:
+```{r}
+df_example <- data.frame(
+    Name = c("Jerry", "Emily", "Steven", "Jane"),
+    Scores = c(25, 50, 75, 100),
+    location = c("Oxford", "London", "Cambridge", "Oxford")
+)
+
+df_example %>%
+    filter(location == "Oxford") %>% 
+    pull(Scores) %>%
+    mean()
+
+# filter is a dplyr function to filter rows of a dataframe
+# pull is a dplyr function to "pull" data from a specific column
+
+```
+
+My preference is to use `tidyverse` for most data frame manipulations, but base R is equally valid!
+
+## Read in data
+
+We have three tables from an analysed RNA-seq experiment. These are:
+- `data/rnaseq_experiment/Exprs_counts.csv` (raw gene expression counts)
+- `data/rnaseq_experiment/Exprs_fpkm.csv` (normalised gene expression counts)
+- `data/rnaseq_experiment/DESeq2_results.csv` (statistics following differential expression analysis)
+
+These are located in data/rnaseq_experiment. We can read them using the tidyverse function `read_csv()`
 
 ```{r}
 
-print("hello world")
+# Data read in with read_csv()
+counts <- read_csv("data/rnaseq_experiment/Exprs_counts.csv")
+fpkm <- read_csv("data/rnaseq_experiment/Exprs_fpkm.csv")
+stats <- read_csv("data/rnaseq_experiment/DEseq2_results.csv")
+
+# For counts and fpkm, set GeneID column to rownames
+counts <- column_to_rownames(counts, "GeneID")
+fpkm <- column_to_rownames(fpkm, "GeneID")
+
+```
+
+Once the data is read, familiarise yourself with them using the `head()`, `tail()` and `View()` functions
+```{r}
+
+View(counts)
+View(fpkm)
+View(stats)
+
+```
+
+## Data distribution
+
+We should first attempt to understand how the gene expression data is distributed.
+
+We can create a histogram of the data using the `hist()` function. 
+1. We first use `unlist()` to convert the 2D table into a 1D numerical vector
+2. We then use `hist()` to blot a historgram, with the `breaks` argument set to 20
+
+Run the chunk below to see the result. Change the input to be fpkm, and see how this alters the distribution. Mess around with the `breaks` argument to improve the visualisation.
+
+```{r}
+
+counts %>%
+    unlist() %>%
+    hist(breaks = 20)
+
+```
+
+The data should show a clearly non-normal distribution. All the visible data is around or close to 0. This is expected, as the vast majority of genes are lowly expressed, and there are relatively few very highly expressed genes. This data is non-normally distributed.
+
+We can transform this data using the `log10()` function. Use the empty code block below to adapt the histogram code, applying the log 10 transformation. Try this with counts and fpkm tables.
+
+```{r}
+
+counts %>%
+    log10() %>%
+    unlist() %>%
+    hist(breaks = 20)
+
+fpkm %>%
+    log10() %>%
+    unlist() %>%
+    hist(breaks = 20)
+
+```
+
+We should see that the log transformation makes the data much closer to a normal distribution. The FPKM table should look even more normal than the counts table, due to library-size normalisation that has already been applied.
+
+## Correlation analysis
+
+One of the first tasks to perform is to assess sample reproducibility. This can be done with two different methods, calculating correlation or distance.
+
+Correlation can be calculated with the `cor()` function. Use `?cor` to find more information. By default, `cor()` will create a correlation matrix comparing between each COLUMN of the table. The default method is to use the Pearson method.
+
+Distance can be calculated with the `dist()` function. Use `?dist` to find more information. By default, `dist()` will create a distance matrix comparing between each ROW of the table. 
+
+Enter your own code below to try creating correlation and distance matrices for the gene expression counts data.
+- `dist()` runs to compare rows with each other. You will need to transpose the table so that samples are rows, genes are columns. The `t()` function transposes the table.
+- Try changing the correlation method from "pearson" to "spearman" and see how this impacts correlation values (hint, use `?cor`)
+
+
+```{r}
+
+cor(counts)
+
+cor(counts, method = "spearman")
+
+dist(t(counts[,-1]))
+
+```
+
+You will find that the correlation scores are very similar between samples. This is because correlation scores are identifying changes global patterns. The overriding pattern in gene expression data tends to be overall level of gene expression (Gene A baseline expression is ~10x higher than Gene B). Therefore, it takes very large shifts in global gene expression to shift sample-sample correlations.
+
+The distance matrix distinguishes between treatment groups much more successfully that correlation. Distance measures the euclydean distance between samples, and so pays more attention to how the gene is changing in real-terms. The downside is that distance matrices are more easily swayed by changes in highly expressed genes.
+
+Correlation matrices can be visualised as a heatmap. The `heatmap.2()` function from the `gplots` package can handle this. Apply the correlation matrix generated above to the the `heatmap.2()` function, with the argument `trace = "none"` and `margins = c(10, 10)`.
+
+```{r}
+
+gplots::heatmap.2(cor(counts), trace = "none", margins = c(10, 10))
+
+```
+
+A distance heatmap requires a bit of additional preparation. See code chunk below.
+
+```{r}
+
+## Calculate distances and convert to matrix
+sample_dists <- dist(t(counts))
+sample_dist_matrix <- as.matrix(sample_dists)
+
+## Set row/column annotation
+rownames(sample_dist_matrix) <- rownames(counts)
+colnames(sample_dist_matrix) <- rownames(counts)
+
+# Run heatmap
+gplots::heatmap.2(sample_dist_matrix, trace = "none", margins = c(10, 10))
+
+```
+
+We can see here that the distance matrix shows that there are similarities between dTAG13 rep3 and the DMSO treated samples. This positions the sample as a potential outlier.
+
+## ggplot2 and volcano plots
+
+`ggplot2` is an essential R package that comes bundled with tidyverse, and is used for generating plots. The "gg" stands for "grammar of graphics", and is used widely (including BBC news graphs!)
+
+There is a learning curve to `ggplot2`, but once you get to grips with it you can create very complex visualisations and data explorations very quickly.
+
+We can demo the construction of a ggplot using a volcano plot as a guide...
+
+ggplots start with the initialisation of a plot:
+- `data` argument refers to the data frame we are working with
+- `mapping` argument takes an `aes()` function (aesthetics), which sets out basic rules, such as "x axis is log2FC" or "colour = P-value"
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = pvalue))
+
+```
+
+Don't be alarmed at the blank plot, that's intentional! We've placed the base layer of the plot.
+We can add a second layer using the "+" operator, and tell ggplot to add data points with `geom_point()`
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = pvalue)) +
+    geom_point()
+
+```
+
+This doesn't look quite right for a volcano plot. The y-axis is wrong, it should be -log10 transformed P-values!
+
+We can integrate this calculation when specifying the mapping aesthetic with the function `-log10()`
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue))) +
+    geom_point()
+
+```
+
+That looks a bit better. But there's no clear distinction between significant and non-significant data. Lets first add dashed-lines to identify p-value 0.05 and Log2FC of 0.5.
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue))) +
+    geom_point() +
+    geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed")
+
+```
+
+This starts to orient us on the plot, but it's not visually clear. We can add a color aesthetic to distinguish significant and non-significant.
+
+```{r}
+# Note, the abs() function converts all negative values to positive
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue), col = pvalue < 0.05 & abs(log2FoldChange) > 0.5)) +
+    geom_point() +
+    geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed")
+
+```
+
+This looks much clearer, but who chose those colours??
+We can specify our own colours using `scale_colour_manual()`
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue), col = pvalue < 0.05 & abs(log2FoldChange) > 0.5)) +
+    geom_point() +
+    geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+    scale_colour_manual(
+        values = c("FALSE" = "grey60", "TRUE" = "blue"),
+        name = "Significant?") +
+    theme_bw()
+
+```
+
+I find the default plot background a bit ugly. There are pre-set themes you can use to adjust the look and feel. Try a few options:
+`theme_grey()`
+`theme_bw()`
+`theme_linedraw()`
+`theme_light()`
+`theme_dark()`
+`theme_minimal()`
+`theme_classic()`
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue), col = pvalue < 0.05 & abs(log2FoldChange) > 0.5)) +
+    geom_point() +
+    geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+    scale_colour_manual(
+        values = c("FALSE" = "grey60", "TRUE" = "blue"),
+        name = "Significant?") +
+    theme_bw()
+
+```
+
+We can also play with sizes. We can scale datapoint size with `-log10(pvalue)`, then add a slight transparancy with the `alpha` argument to give an idea of density.
+
+```{r}
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue), size = -log10(pvalue), col = pvalue < 0.05 & abs(log2FoldChange) > 0.5)) +
+    geom_point(alpha = 0.3) +
+    geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+    scale_colour_manual(
+        values = c("FALSE" = "grey60", "TRUE" = "blue"),
+        name = "Significant?") +
+    theme_bw()
+
+```
+
+We may want to label genes of interest. This can be done with a little extra work. We will add a new layer called `geom_label()`, but this will use a different data table source.
+This data table source will only contain the genes of interest.
+
+```{r}
+
+genes_of_interest <- c("HOXA9", "MYC", "RUNX1", "ITGAM") # Change as you want!
+
+stats_subset <- filter(stats, GeneID %in% genes_of_interest)
+
+ggplot(data = stats, mapping = aes(x = log2FoldChange, y = -log10(pvalue), size = -log10(pvalue), col = pvalue < 0.05 & abs(log2FoldChange) > 0.5)) +
+    geom_point(alpha = 0.3) +
+    geom_label(data = stats_subset, mapping = aes(label = GeneID), col = "black") +
+    geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+    scale_colour_manual(
+        values = c("FALSE" = "grey60", "TRUE" = "blue"),
+        name = "Significant?") +
+    theme_bw()
 
 ```
